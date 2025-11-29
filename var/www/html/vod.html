@@ -1,0 +1,118 @@
+nguyenthanh@nguyenthanh-virtual-machine:~$ sudo cat /var/www/html/vod.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOD Streaming - Playlist</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #f39c12;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 0 auto;
+            gap: 20px;
+        }
+
+        .video-player {
+            flex: 2;
+        }
+
+        video {
+            width: 100%;
+            height: 500px;
+            background: black;
+            border-radius: 8px;
+        }
+
+        .playlist {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .playlist-item {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            background: #f8f8f8;
+            cursor: pointer;
+        }
+
+        .playlist-item:hover {
+            background: #e0e0e0;
+        }
+
+        .playlist-item.active {
+            border-color: #f39c12;
+            background: #fff3e0;
+        }
+    </style>
+</head>
+<body>
+    <h1>VOD Streaming - Playlist</h1>
+    <div class="container">
+        <div class="video-player">
+            <video id="my-video" controls></video>
+        </div>
+        <div class="playlist">
+            <div class="playlist-item active" data-src="/vod/video1/index.m3u8">Video 1</div>
+            <div class="playlist-item" data-src="/vod/video2/index.m3u8">Video 2</div>
+            <div class="playlist-item" data-src="/vod/video3/index.m3u8">Video 3</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        const video = document.getElementById('my-video');
+        let hls;
+
+        function loadVideo(src) {
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(src);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play();
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = src;
+                video.play();
+            }
+        }
+
+        // Load video dau tien
+        loadVideo('/vod/video1/index.m3u8');
+
+        // Playlist
+        document.querySelectorAll('.playlist-item').forEach(item => {
+            item.addEventListener('click', function() {
+                document.querySelectorAll('.playlist-item')
+                    .forEach(i => i.classList.remove('active'));
+                this.classList.add('active');
+                loadVideo(this.dataset.src);
+            });
+        });
+    </script>
+</body>
+</html>
+
