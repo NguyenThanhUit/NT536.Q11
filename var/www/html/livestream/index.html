@@ -1,0 +1,59 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Live Streaming</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+body { font-family: Arial; text-align: center; padding: 20px; }
+video { margin-top: 20px; width: 800px; height: 450px; background: black; }
+</style>
+</head>
+<body>
+<h1>Welcome to Our Video on LIVESTREAM </h1>
+<video id="video" controls autoplay></video>
+
+<script>
+// Lấy stream key mới nhất từ folder /hls/
+async function getLatestStream() {
+    const resp = await fetch('/hls/');
+    const html = await resp.text();
+
+    // Parse danh sách folder từ autoindex
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const links = Array.from(doc.querySelectorAll('a'));
+    const folders = links.map(a => a.getAttribute('href').replace('/', ''))
+                         .filter(n => n !== '');
+    // Lay folder moi nhat
+    return folders[folders.length - 1];
+}
+
+getLatestStream().then(streamKey => {
+    if(!streamKey) {
+        alert("Không có livestream nào!");
+        return;
+    }
+
+    // Chỉ cần streamKey, URL sẽ là /hls/streamKey/index.m3u8
+    const url = '/hls/' + streamKey + '/index.m3u8';
+    const video = document.getElementById('video');
+
+    if(Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            video.play();
+        });
+    } else if(video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.addEventListener('loadedmetadata', function() {
+            video.play();
+        });
+    }
+});
+</script>
+</body>
+</html>
