@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Stream HLS</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 1000px;
+            background: black;
+        }
+        select {
+            margin: 10px;
+            padding: 8px;
+            background: #333;
+            color: white;
+            font-size: 14px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .status {
+            margin: 10px 0;
+            color: #0f0;
+        }
+        .error {
+            color: #f00;
+        }
+        .info {
+            color: #ff0;
+        }
+        .refresh {
+            background: #444;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .refresh:hover {
+            background: #555;
+        }
+        .stats {
+            margin: 10px 0;
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔴 Live Streaming</h2>
+        
+        <div>
+            <label>Stream:</label>
+            <select id="streamSelect" onchange="changeStream()">
+                <option value="">Đang tìm streams...</option>
+            </select>
+            <button class="refresh" onclick="scanStreams()">🔄 Làm mới</button>
+        </div>
+        
+        <div>
+            <label>Chất lượng:</label>
+            <select id="qualitySelect" onchange="changeQuality()">
+                <option value="auto">Auto (Adaptive)</option>
+                <option value="low">Low (240p) - Fixed</option>
+                <option value="mid">Mid (360p) - Fixed</option>
+                <option value="hi">High (720p) - Fixed</option>
+            </select>
+        </div>
+        
+        <div class="status" id="status">Đang quét streams...</div>
+        <div class="stats" id="stats"></div>
+        
+        <video id="video" controls autoplay muted></video>
+    </div>
+
+<script>
+    const video = document.getElementById('video');
+    const statusDiv = document.getElementById('status');
+    const statsDiv = document.getElementById('stats');
+    const streamSelect = document.getElementById('streamSelect');
+    const qualitySelect = document.getElementById('qualitySelect');
+    
+    let hls = null;
+    let availableStreams = [];
+    
+    // Quét streams từ thư mục /hls/
+    async function scanStreams() {
+        statusDiv.textContent = 'Đang quét streams...';
+        statusDiv.className = 'status';
+        
+        try {
+            const response = await fetch('/hls/');
+            const html = await response.text();
+            
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const links = doc.querySelectorAll('a');
+            
+            availableStreams = [];
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.endsWith('.m3u8') && !href.includes('_')) {
+                    const streamName = href.replace('.m3u8', '');
+                    availableStreams.push(streamName);
+                }
+            });
+            
+            streamSelect.innerHTML = '';
+            if (availableStreams.length === 0) {
+                streamSelect.innerHTML = '<option value="">Không có stream nào</option>';
+                statusDiv.textContent = '❌ Không tìm thấy stream - Bật OBS và push stream';
+                statusDiv.className = 'status error';
+            } else {
+                availableStreams.forEach(stream => {
+                    const option = document.createElement('option');
+                    option.value = stream;
+                    option.textContent = stream;
+                    streamSelect.appendChild(option);
+                });
+                statusDiv.textContent = `✅ Tìm thấy ${availableStreams.length} stream(s)`;
+                loadStream();
+            }
+        } catch (error) {
+            console.error('Lỗi quét streams:', error);
+            statusDiv.textContent = '❌ Lỗi kết nối server';
+            statusDiv.className = 'status error';
+        }
+    }
+    
+    function getStreamUrl() {
+        const stream = streamSelect.value;
+        const quality = qualitySelect.value;
+        
+        if (!stream) return null;
+        
+        // QUAN TRỌNG: Khi chọn AUTO, load MASTER PLAYLIST
+        if (quality === 'auto') {
+            return `/hls/${stream}.m3u8`;  // Master playlist cho ABR
+        } else {
+            // Fixed quality: load trực tiếp variant cụ thể
+            return `/hls/${stream}_${quality}/index.m3u8`;
+        }
+    }
+    
+    function loadStream() {
+        const streamUrl = getStreamUrl();
+        
+        if (!streamUrl) {
+            statusDiv.textContent = '❌ Chưa chọn stream';
+            return;
+        }
+        
+        const stream = streamSelect.value;
+        const quality = qualitySelect.value;
+        
+        statusDiv.textContent = `Đang tải: ${stream} (${quality})...`;
+        statusDiv.className = 'status';
+        
+        // Cleanup
+        if (hls) {
+            hls.destroy();
+        }
+        
+        if (Hls.isSupported()) {
+            const isAutoMode = (quality === 'auto');
+            
+            hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90,
+                
+                // CẤU HÌNH ADAPTIVE BITRATE CHO AUTO MODE
+                startLevel: isAutoMode ? -1 : 0, 
+                capLevelToPlayerSize: isAutoMode, 
+                abrEwmaDefaultEstimate: 500000,  
+                
+                // Tham số ABR algorithm
+                abrEwmaFastLive: 3.0,     
+                abrEwmaSlowLive: 9.0,     
+                abrBandWidthFactor: 0.95, 
+                abrBandWidthUpFactor: 0.7 
+            });
+            
+            hls.loadSource(streamUrl);
+            hls.attachMedia(video);
+            
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                if (isAutoMode) {
+                    statusDiv.textContent = `✅ Đang phát: ${stream} (Auto - ABR Enabled)`;
+                    statusDiv.className = 'status info';
+                    
+                    // Hiển thị các quality có sẵn
+                    const levels = hls.levels.map((l, i) => 
+                        `${l.height}p (${Math.round(l.bitrate/1000)}kbps)`
+                    ).join(', ');
+                    statsDiv.textContent = `📊 Chất lượng có sẵn: ${levels}`;
+                } else {
+                    statusDiv.textContent = `✅ Đang phát: ${stream} (${quality} - Fixed)`;
+                }
+                video.play();
+            });
+            
+            // Theo dõi khi chuyển quality (chỉ trong auto mode)
+            if (isAutoMode) {
+                hls.on(Hls.Events.LEVEL_SWITCHING, (event, data) => {
+                    const level = hls.levels[data.level];
+                    statusDiv.textContent = `🔄 Đang chuyển sang ${level.height}p...`;
+                    statusDiv.className = 'status info';
+                });
+                
+                hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+                    const level = hls.levels[data.level];
+                    statusDiv.textContent = `✅ Đang phát: ${stream} ở ${level.height}p (${Math.round(level.bitrate/1000)}kbps)`;
+                    statusDiv.className = 'status';
+                });
+                
+                // Hiển thị bandwidth estimate
+                hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+                    const bandwidth = Math.round((hls.bandwidthEstimate || 0) / 1000);
+                    const currentLevel = hls.levels[hls.currentLevel];
+                    if (currentLevel) {
+                        statsDiv.textContent = `📶 Tốc độ mạng: ~${bandwidth} kbps | Đang phát: ${currentLevel.height}p`;
+                    }
+                });
+            }
+            
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                if (data.fatal) {
+                    statusDiv.textContent = `❌ Lỗi: ${data.details}`;
+                    statusDiv.className = 'status error';
+                    
+                    if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                        setTimeout(() => {
+                            statusDiv.textContent += ' - Thử lại sau 3s...';
+                            setTimeout(loadStream, 3000);
+                        }, 1000);
+                    } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                        console.log('Trying to recover media error...');
+                        hls.recoverMediaError();
+                    }
+                }
+            });
+            
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Native HLS support (Safari)
+            video.src = streamUrl;
+            video.addEventListener('loadedmetadata', function() {
+                statusDiv.textContent = `✅ Đang phát: ${stream} (${quality})`;
+            });
+        } else {
+            statusDiv.textContent = '❌ Trình duyệt không hỗ trợ HLS';
+            statusDiv.className = 'status error';
+        }
+    }
+    
+    function changeStream() {
+        loadStream();
+    }
+    
+    function changeQuality() {
+        loadStream();
+    }
+    
+    // Auto scan khi load trang
+    scanStreams();
+    
+    // Auto refresh mỗi 40s
+    setInterval(scanStreams, 40000);
+</script>
+</body>
+</html>

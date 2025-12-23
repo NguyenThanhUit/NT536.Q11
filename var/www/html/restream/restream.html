@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>RTMP Restream</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+        .box {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+        }
+        input, button {
+            padding: 10px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+        button {
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        iframe {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<h2>🎥 RTMP Restream Control Panel</h2>
+
+<!-- ================= YOUTUBE ================= -->
+<div class="box">
+    <h3>🔴 YouTube Live</h3>
+    <input id="ytKey" type="text" placeholder="YouTube Stream Key">
+</div>
+
+<!-- ================= FACEBOOK ================= -->
+<div class="box">
+    <h3>🔵 Facebook Live</h3>
+    <input id="fbKey" type="text" placeholder="Facebook Stream Key">
+</div>
+
+<button onclick="start()">▶ Start Restream</button>
+<button onclick="stop()">⏹ Stop Restream</button>
+
+<div id="status"></div>
+<div id="player"></div>
+
+<script>
+
+const API = "http://192.168.39.181:3000";
+const YT_CHANNEL_ID = "UCnhD3rneynWlP5wZ3saGoDw";
+const START_DELAY = 30000; // 30s
+
+let timer = null;
+
+function start() {
+    const youtubeKey = document.getElementById("ytKey").value.trim();
+    const facebookKey = document.getElementById("fbKey").value.trim();
+
+    if (!youtubeKey && !facebookKey) {
+        alert("❌ Phải nhập ít nhất 1 stream key");
+        return;
+    }
+
+    document.getElementById("status").innerText =
+        "⏳ Đang khởi tạo stream... vui lòng đợi ~30 giây";
+
+    fetch(API + "/restream/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ youtubeKey, facebookKey })
+    })
+    .then(res => res.json())
+    .then(() => {
+        if (youtubeKey) {
+            timer = setTimeout(showYouTube, START_DELAY);
+        }
+        if (facebookKey) {
+            document.getElementById("status").innerText +=
+                "\n🔵 Facebook đang được restream";
+        }
+    })
+    .catch(err => {
+        document.getElementById("status").innerText =
+            "❌ Không kết nối được server API";
+        console.error(err);
+    });
+}
+
+function stop() {
+    if (timer) {
+        clearTimeout(timer);
+        timer = null;
+    }
+
+    fetch(API + "/restream/stop", { method: "POST" })
+    .then(() => {
+        document.getElementById("status").innerText = "🛑 Stream đã dừng";
+        document.getElementById("player").innerHTML = "";
+    })
+    .catch(console.error);
+}
+
+function showYouTube() {
+    document.getElementById("status").innerText =
+        "🔴 YouTube đang LIVE";
+
+    document.getElementById("player").innerHTML = `
+        <h3>YouTube Live Preview</h3>
+        <iframe width="800" height="450"
+            src="https://www.youtube.com/embed/live_stream?channel=${YT_CHANNEL_ID}&autoplay=1"
+            allow="autoplay; encrypted-media"
+            allowfullscreen>
+        </iframe>
+    `;
+}
+</script>
+
+</body>
+</html>

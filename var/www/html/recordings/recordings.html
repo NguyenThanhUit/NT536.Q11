@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Recordings Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            border-bottom: 2px solid #444;
+            padding-bottom: 10px;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #222;
+            border-radius: 5px;
+        }
+        button {
+            background: #444;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+            border-radius: 3px;
+        }
+        button:hover {
+            background: #555;
+        }
+        .sections {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .section {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .section h2 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #444;
+        }
+        .section-flv h2 {
+            color: #fa3;
+        }
+        .section-mp4 h2 {
+            color: #0af;
+        }
+        .recording-item {
+            background: #222;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .recording-name {
+            font-size: 14px;
+            font-weight: bold;
+            color: #0af;
+            margin-bottom: 8px;
+        }
+        .recording-meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .recording-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .recording-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+            margin: 0;
+        }
+        .play-btn {
+            background: #e50914;
+        }
+        .play-btn:hover {
+            background: #f40612;
+        }
+        .download-btn {
+            background: #0a5;
+        }
+        .download-btn:hover {
+            background: #0c7;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .success {
+            background: #0a5;
+        }
+        .error {
+            background: #c33;
+        }
+        .loading {
+            background: #555;
+        }
+        video {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px 0;
+            background: black;
+        }
+        .info-text {
+            color: #888;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .auto-refresh {
+            color: #0a5;
+            font-size: 12px;
+        }
+        .empty-message {
+            color: #666;
+            text-align: center;
+            padding: 30px;
+            font-style: italic;
+        }
+        .count-badge {
+            background: #333;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sections {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>📹 Danh sách Records</h1>
+    
+    <div class="controls">
+        <h3>Quản lý Recordings</h3>
+        <button onclick="loadRecordings()">🔄 Làm mới danh sách</button>
+        <div class="info-text">
+            ✅ Auto-convert ENABLED: Cron job tự động chạy mỗi 1 phút<br>
+            📂 FLV: <code>/var/www/html/recordings-flv/</code><br>
+            📂 MP4: <code>/var/www/html/recordings-mp4/</code><br>
+            📋 Log: <code>/var/log/convert_recordings.log</code>
+        </div>
+        <div class="auto-refresh">⏱️ Tự động làm mới sau <span id="countdown">30</span>s</div>
+    </div>
+    
+    <div id="status"></div>
+    
+    <div class="sections">
+        <!-- FLV Section -->
+        <div class="section section-flv">
+            <h2>⚠️ FLV Files <span class="count-badge" id="flvCount">0</span></h2>
+            <div id="flvList"></div>
+        </div>
+        
+        <!-- MP4 Section -->
+        <div class="section section-mp4">
+            <h2>✅ MP4 Files <span class="count-badge" id="mp4Count">0</span></h2>
+            <div id="mp4List"></div>
+        </div>
+    </div>
+    
+    <div id="player" style="display:none; margin-top: 30px;">
+        <h3>Đang phát: <span id="currentFile"></span></h3>
+        <button onclick="closePlayer()" style="background:#c33;">✖ Đóng</button>
+        <video id="videoPlayer" controls></video>
+    </div>
+
+<script>
+    let countdown = 30;
+    let countdownInterval;
+    
+    // Load danh sách recordings
+    async function loadRecordings() {
+        const statusDiv = document.getElementById('status');
+        const flvListDiv = document.getElementById('flvList');
+        const mp4ListDiv = document.getElementById('mp4List');
+        const flvCountSpan = document.getElementById('flvCount');
+        const mp4CountSpan = document.getElementById('mp4Count');
+        
+        statusDiv.innerHTML = '<div class="status loading">Đang tải danh sách...</div>';
+        flvListDiv.innerHTML = '<div class="loading">Đang tải...</div>';
+        mp4ListDiv.innerHTML = '<div class="loading">Đang tải...</div>';
+        
+        try {
+            console.log('🔍 Fetching recordings...');
+            
+            // Fetch FLV
+            const flvResponse = await fetch('/recordings-flv/');
+            const flvHtml = await flvResponse.text();
+            
+            // Fetch MP4
+            const mp4Response = await fetch('/recordings-mp4/');
+            const mp4Html = await mp4Response.text();
+            
+            // Parse FLV
+            const flvParser = new DOMParser();
+            const flvDoc = flvParser.parseFromString(flvHtml, 'text/html');
+            const flvLinks = flvDoc.querySelectorAll('a');
+            
+            const flvFiles = [];
+            flvLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.endsWith('.flv') && href !== '../') {
+                    flvFiles.push(href);
+                }
+            });
+            
+            // Parse MP4
+            const mp4Parser = new DOMParser();
+            const mp4Doc = mp4Parser.parseFromString(mp4Html, 'text/html');
+            const mp4Links = mp4Doc.querySelectorAll('a');
+            
+            const mp4Files = [];
+            mp4Links.forEach(link => {
+                const href = link.getAttribute('href');
+                if (href && href.endsWith('.mp4') && href !== '../') {
+                    mp4Files.push(href);
+                }
+            });
+            
+            console.log(`📹 FLV: ${flvFiles.length}, MP4: ${mp4Files.length}`);
+            
+            // Update counts
+            flvCountSpan.textContent = flvFiles.length;
+            mp4CountSpan.textContent = mp4Files.length;
+            
+            // Sort (newest first)
+            flvFiles.sort().reverse();
+            mp4Files.sort().reverse();
+            
+            // Display FLV
+            if (flvFiles.length === 0) {
+                flvListDiv.innerHTML = '<div class="empty-message">Không có file FLV</div>';
+            } else {
+                flvListDiv.innerHTML = '';
+                flvFiles.forEach(filename => {
+                    const item = createFlvItem(filename);
+                    flvListDiv.appendChild(item);
+                });
+            }
+            
+            // Display MP4
+            if (mp4Files.length === 0) {
+                mp4ListDiv.innerHTML = '<div class="empty-message">Không có file MP4<br>Đợi cron job convert...</div>';
+            } else {
+                mp4ListDiv.innerHTML = '';
+                mp4Files.forEach(filename => {
+                    const item = createMp4Item(filename);
+                    mp4ListDiv.appendChild(item);
+                });
+            }
+            
+            statusDiv.innerHTML = `<div class="status success">✅ Tìm thấy ${flvFiles.length} FLV, ${mp4Files.length} MP4</div>`;
+            setTimeout(() => statusDiv.innerHTML = '', 3000);
+            
+            countdown = 30;
+            
+        } catch (error) {
+            console.error('❌ Error:', error);
+            statusDiv.innerHTML = `<div class="status error">❌ Lỗi: ${error.message}</div>`;
+        }
+    }
+    
+    // Create FLV item
+    function createFlvItem(filename) {
+        const div = document.createElement('div');
+        div.className = 'recording-item';
+        
+        const timeStr = parseTime(filename);
+        const fullPath = '/recordings-flv/' + filename;
+        
+        div.innerHTML = `
+            <div class="recording-name">📼 ${filename}</div>
+            <div class="recording-meta">
+                ${timeStr}<br>
+                ⏳ Đang chờ convert...
+            </div>
+            <div class="recording-actions">
+                <button class="download-btn" onclick="downloadFile('${fullPath}')">⬇️ Tải FLV</button>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    // Create MP4 item
+    function createMp4Item(filename) {
+        const div = document.createElement('div');
+        div.className = 'recording-item';
+        
+        const timeStr = parseTime(filename);
+        const fullPath = '/recordings-mp4/' + filename;
+        
+        div.innerHTML = `
+            <div class="recording-name">🎬 ${filename}</div>
+            <div class="recording-meta">
+                ${timeStr}<br>
+                ✅ Có thể phát
+            </div>
+            <div class="recording-actions">
+                <button class="play-btn" onclick="playVideo('${fullPath}', '${filename}')">▶️ Phát</button>
+                <button class="download-btn" onclick="downloadFile('${fullPath}')">⬇️ Tải MP4</button>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    // Parse time from filename
+    function parseTime(filename) {
+        const match = filename.match(/(\d{4})-(\d{2})-(\d{2})-(\d{6})/);
+        if (match) {
+            const [_, year, month, day, time] = match;
+            const h = time.substring(0, 2);
+            const m = time.substring(2, 4);
+            const s = time.substring(4, 6);
+            return `📅 ${day}/${month}/${year} ⏰ ${h}:${m}:${s}`;
+        }
+        return '';
+    }
+    
+    // Play video
+    function playVideo(filepath, filename) {
+        const player = document.getElementById('player');
+        const video = document.getElementById('videoPlayer');
+        const currentFile = document.getElementById('currentFile');
+        
+        video.src = filepath;
+        currentFile.textContent = filename;
+        player.style.display = 'block';
+        video.play();
+        player.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // Close player
+    function closePlayer() {
+        const player = document.getElementById('player');
+        const video = document.getElementById('videoPlayer');
+        video.pause();
+        video.src = '';
+        player.style.display = 'none';
+    }
+    
+    // Download file
+    function downloadFile(filepath) {
+        const a = document.createElement('a');
+        a.href = filepath;
+        a.download = filepath.split('/').pop();
+        a.click();
+    }
+    
+    // Auto-refresh countdown
+    function startCountdown() {
+        const countdownSpan = document.getElementById('countdown');
+        countdownInterval = setInterval(() => {
+            countdown--;
+            countdownSpan.textContent = countdown;
+            if (countdown <= 0) {
+                countdown = 30;
+                loadRecordings();
+            }
+        }, 1000);
+    }
+    
+    // Auto load
+    console.log('🚀 Page loaded');
+    loadRecordings();
+    startCountdown();
+</script>
+</body>
+</html>

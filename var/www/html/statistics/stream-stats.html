@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Stream Statistics - Real-time</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            border-bottom: 2px solid #444;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .back-btn {
+            background: #444;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .back-btn:hover {
+            background: #555;
+        }
+        
+        /* Status Banner */
+        .status-banner {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .status-live {
+            background: linear-gradient(135deg, #e52d27 0%, #b31217 100%);
+            animation: pulse 2s infinite;
+        }
+        .status-offline {
+            background: #333;
+            color: #888;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        /* Real-time Stats */
+        .realtime-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .stat-card.bitrate {
+            background: linear-gradient(135deg, #0575e6 0%, #021b79 100%);
+        }
+        .stat-card.viewers {
+            background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%);
+        }
+        .stat-card.duration {
+            background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+        }
+        .stat-card.bandwidth {
+            background: linear-gradient(135deg, #8e2de2 0%, #4a00e0 100%);
+        }
+        .stat-value {
+            font-size: 42px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .stat-unit {
+            font-size: 18px;
+            opacity: 0.8;
+        }
+        
+        /* Stream Info */
+        .stream-info {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .stream-info h3 {
+            margin-top: 0;
+            color: #0af;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .info-item {
+            padding: 10px;
+            background: #222;
+            border-radius: 5px;
+            border-left: 3px solid #0af;
+        }
+        .info-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            font-size: 16px;
+            color: #fff;
+            font-weight: bold;
+        }
+        
+        /* History Chart */
+        .chart {
+            background: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .chart h3 {
+            margin-top: 0;
+            color: #0af;
+        }
+        .chart-canvas {
+            width: 100%;
+            height: 200px;
+            background: #222;
+            border-radius: 5px;
+            padding: 10px;
+            position: relative;
+        }
+        .chart-line {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            height: 180px;
+        }
+        .chart-point {
+            position: absolute;
+            width: 3px;
+            background: #0af;
+            bottom: 0;
+        }
+        
+        /* Active Streams Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1a1a;
+            margin: 20px 0;
+        }
+        th {
+            background: #222;
+            padding: 12px;
+            text-align: left;
+            color: #0af;
+            border-bottom: 2px solid #333;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #222;
+        }
+        tr:hover {
+            background: #252525;
+        }
+        .live-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background: #f00;
+            border-radius: 50%;
+            margin-right: 5px;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .realtime-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>
+        <span>🔴 Stream Statistics - Real-time</span>
+        <a href="/" class="back-btn">← Trang chủ</a>
+    </h1>
+    
+    <!-- Status Banner -->
+    <div id="statusBanner" class="status-banner status-offline">
+        ⭕ OFFLINE - Không có stream đang hoạt động
+    </div>
+    
+    <!-- Real-time Stats -->
+    <div class="realtime-stats">
+        <div class="stat-card bitrate">
+            <div class="stat-label">Bitrate Video</div>
+            <div class="stat-value" id="statBitrate">0</div>
+            <div class="stat-unit">kbps</div>
+        </div>
+        
+        <div class="stat-card viewers">
+            <div class="stat-label">Viewers</div>
+            <div class="stat-value" id="statViewers">0</div>
+            <div class="stat-unit">người xem</div>
+        </div>
+        
+        <div class="stat-card duration">
+            <div class="stat-label">Thời lượng</div>
+            <div class="stat-value" id="statDuration">00:00:00</div>
+        </div>
+        
+        <div class="stat-card bandwidth">
+            <div class="stat-label">Bandwidth</div>
+            <div class="stat-value" id="statBandwidth">0</div>
+            <div class="stat-unit">MB/s</div>
+        </div>
+    </div>
+    
+    <!-- Stream Info -->
+    <div class="stream-info">
+        <h3>📊 Thông tin Stream</h3>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Stream Key</div>
+                <div class="info-value" id="infoStreamKey">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Resolution</div>
+                <div class="info-value" id="infoResolution">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">FPS</div>
+                <div class="info-value" id="infoFPS">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Video Codec</div>
+                <div class="info-value" id="infoVideoCodec">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Audio Codec</div>
+                <div class="info-value" id="infoAudioCodec">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Total Bytes In</div>
+                <div class="info-value" id="infoBytesIn">0 MB</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Total Bytes Out</div>
+                <div class="info-value" id="infoBytesOut">0 MB</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Uptime</div>
+                <div class="info-value" id="infoUptime">-</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bitrate History Chart -->
+    <div class="chart">
+        <h3>📈 Bitrate History (Last 60s)</h3>
+        <canvas id="bitrateChart" width="1200" height="200"></canvas>
+    </div>
+    
+    <!-- Active Streams Table -->
+    <div class="stream-info">
+        <h3>🎬 Active Streams</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Application</th>
+                    <th>Stream Name</th>
+                    <th>Bitrate</th>
+                    <th>Viewers</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody id="streamsTableBody">
+                <tr>
+                    <td colspan="6" style="text-align:center;color:#888;">Đang tải...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Auto refresh info -->
+    <div style="text-align:center;color:#888;font-size:12px;margin-top:20px;">
+        ⏱️ Auto-refresh mỗi 2 giây | Cập nhật lần cuối: <span id="lastUpdate">-</span>
+    </div>
+
+<script>
+    let bitrateHistory = [];
+    let maxHistoryPoints = 60;
+    let chart = null;
+    
+    // Fetch RTMP stats from NGINX
+    async function fetchStats() {
+        try {
+            const response = await fetch('/stats');
+            const xmlText = await response.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+            
+            return xmlDoc;
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+            return null;
+        }
+    }
+    
+    // Update all statistics
+    async function updateStats() {
+        const xmlDoc = await fetchStats();
+        if (!xmlDoc) return;
+        
+        // Find live streams
+        const liveApp = xmlDoc.querySelector('server > application[name="live"]');
+        const streams = liveApp ? liveApp.querySelectorAll('stream') : [];
+        
+        if (streams.length > 0) {
+            // Stream is LIVE
+            document.getElementById('statusBanner').className = 'status-banner status-live';
+            document.getElementById('statusBanner').innerHTML = '🔴 LIVE - Stream đang hoạt động';
+            
+            // Get first stream data
+            const stream = streams[0];
+            const streamName = stream.querySelector('name')?.textContent || '-';
+            const time = parseInt(stream.querySelector('time')?.textContent || '0');
+            const bytesIn = parseInt(stream.querySelector('bytes_in')?.textContent || '0');
+            const bytesOut = parseInt(stream.querySelector('bytes_out')?.textContent || '0');
+            const bwIn = parseInt(stream.querySelector('bw_in')?.textContent || '0');
+            const bwOut = parseInt(stream.querySelector('bw_out')?.textContent || '0');
+            
+            // Get clients (viewers)
+            const clients = stream.querySelectorAll('client').length;
+            
+            // Get video meta
+            const metaVideo = stream.querySelector('meta > video');
+            const width = metaVideo?.querySelector('width')?.textContent || '-';
+            const height = metaVideo?.querySelector('height')?.textContent || '-';
+            const fps = metaVideo?.querySelector('frame_rate')?.textContent || '-';
+            const videoCodec = metaVideo?.querySelector('codec')?.textContent || '-';
+            
+            // Get audio meta
+            const metaAudio = stream.querySelector('meta > audio');
+            const audioCodec = metaAudio?.querySelector('codec')?.textContent || '-';
+            
+            // Update stats cards
+            const bitrateKbps = Math.round((bwIn * 8) / 1024);
+            document.getElementById('statBitrate').textContent = bitrateKbps;
+            document.getElementById('statViewers').textContent = clients;
+            document.getElementById('statDuration').textContent = formatDuration(time / 1000);
+            document.getElementById('statBandwidth').textContent = (bwIn / 1024 / 1024).toFixed(2);
+            
+            // Update info grid
+            document.getElementById('infoStreamKey').textContent = streamName;
+            document.getElementById('infoResolution').textContent = width && height ? `${width}x${height}` : '-';
+            document.getElementById('infoFPS').textContent = fps;
+            document.getElementById('infoVideoCodec').textContent = videoCodec;
+            document.getElementById('infoAudioCodec').textContent = audioCodec;
+            document.getElementById('infoBytesIn').textContent = (bytesIn / 1024 / 1024).toFixed(2) + ' MB';
+            document.getElementById('infoBytesOut').textContent = (bytesOut / 1024 / 1024).toFixed(2) + ' MB';
+            document.getElementById('infoUptime').textContent = formatDuration(time / 1000);
+            
+            // Update bitrate history
+            bitrateHistory.push(bitrateKbps);
+            if (bitrateHistory.length > maxHistoryPoints) {
+                bitrateHistory.shift();
+            }
+            updateBitrateChart();
+            
+        } else {
+            // Stream is OFFLINE
+            document.getElementById('statusBanner').className = 'status-banner status-offline';
+            document.getElementById('statusBanner').innerHTML = '⭕ OFFLINE - Không có stream đang hoạt động';
+            
+            // Reset stats
+            document.getElementById('statBitrate').textContent = '0';
+            document.getElementById('statViewers').textContent = '0';
+            document.getElementById('statDuration').textContent = '00:00:00';
+            document.getElementById('statBandwidth').textContent = '0';
+            
+            // Reset info
+            ['infoStreamKey', 'infoResolution', 'infoFPS', 'infoVideoCodec', 'infoAudioCodec', 'infoUptime'].forEach(id => {
+                document.getElementById(id).textContent = '-';
+            });
+            document.getElementById('infoBytesIn').textContent = '0 MB';
+            document.getElementById('infoBytesOut').textContent = '0 MB';
+            
+            // Clear history
+            bitrateHistory = [];
+            updateBitrateChart();
+        }
+        
+        // Update streams table
+        updateStreamsTable(xmlDoc);
+        
+        // Update last update time
+        const now = new Date();
+        document.getElementById('lastUpdate').textContent = now.toLocaleTimeString('vi-VN');
+    }
+    
+    // Update streams table
+    function updateStreamsTable(xmlDoc) {
+        const tbody = document.getElementById('streamsTableBody');
+        tbody.innerHTML = '';
+        
+        const apps = xmlDoc.querySelectorAll('server > application');
+        let hasStreams = false;
+        
+        apps.forEach(app => {
+            const appName = app.querySelector('name')?.textContent || '-';
+            const streams = app.querySelectorAll('stream');
+            
+            streams.forEach(stream => {
+                hasStreams = true;
+                const streamName = stream.querySelector('name')?.textContent || '-';
+                const time = parseInt(stream.querySelector('time')?.textContent || '0');
+                const bwIn = parseInt(stream.querySelector('bw_in')?.textContent || '0');
+                const clients = stream.querySelectorAll('client').length;
+                const bitrateKbps = Math.round((bwIn * 8) / 1024);
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td><span class="live-indicator"></span> LIVE</td>
+                        <td>${appName}</td>
+                        <td style="color:#0af;font-weight:bold;">${streamName}</td>
+                        <td>${bitrateKbps} kbps</td>
+                        <td>${clients}</td>
+                        <td>${formatDuration(time / 1000)}</td>
+                    </tr>
+                `;
+            });
+        });
+        
+        if (!hasStreams) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Không có stream nào đang hoạt động</td></tr>';
+        }
+    }
+    
+    // Update bitrate chart
+    function updateBitrateChart() {
+        const canvas = document.getElementById('bitrateChart');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Clear canvas
+        ctx.fillStyle = '#222';
+        ctx.fillRect(0, 0, width, height);
+        
+        if (bitrateHistory.length === 0) return;
+        
+        // Find max value
+        const maxValue = Math.max(...bitrateHistory, 1000);
+        
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+            const y = (height / 5) * i;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+        
+        // Draw line
+        ctx.strokeStyle = '#0af';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const pointWidth = width / maxHistoryPoints;
+        bitrateHistory.forEach((value, index) => {
+            const x = index * pointWidth;
+            const y = height - (value / maxValue) * height;
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
+        
+        // Draw points
+        ctx.fillStyle = '#0af';
+        bitrateHistory.forEach((value, index) => {
+            const x = index * pointWidth;
+            const y = height - (value / maxValue) * height;
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        
+        // Draw labels
+        ctx.fillStyle = '#888';
+        ctx.font = '12px Arial';
+        ctx.fillText('0 kbps', 5, height - 5);
+        ctx.fillText(maxValue + ' kbps', 5, 15);
+    }
+    
+    // Format duration
+    function formatDuration(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    
+    // Auto refresh every 2 seconds
+    setInterval(updateStats, 2000);
+    
+    // Initial load
+    console.log('🚀 Stream statistics page loaded');
+    updateStats();
+</script>
+</body>
+</html>

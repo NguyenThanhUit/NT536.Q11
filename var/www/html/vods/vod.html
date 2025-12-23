@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>VOD Streaming</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #f39c12;
+            margin-bottom: 30px;
+        }
+
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: auto;
+            gap: 20px;
+        }
+
+        video {
+            width: 100%;
+            height: 480px;
+            background: black;
+            border-radius: 8px;
+        }
+
+        .playlist {
+            width: 300px;
+            border-left: 1px solid #ddd;
+            padding-left: 15px;
+            overflow-y: auto;
+        }
+
+        .item {
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            background: #f8f8f8;
+        }
+
+        .item:hover {
+            background: #e0e0e0;
+        }
+
+        .item.active {
+            background: #fff3e0;
+            border-color: #f39c12;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🎬 Video on Demand using HLS</h1>
+
+<div class="container">
+    <div style="flex:1">
+        <video id="video" controls></video>
+    </div>
+
+    <div class="playlist" id="playlist">
+        Đang tải danh sách video...
+    </div>
+</div>
+
+<script>
+const PLAYLIST_URL = '/vods-hls/';
+const playlistEl = document.getElementById('playlist');
+const video = document.getElementById('video');
+let hls = null;
+
+/* ===== Play video ===== */
+function play(src) {
+    if (hls) {
+        hls.destroy();
+        hls = null;
+    }
+
+    if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+    } else {
+        video.src = src;
+        video.play();
+    }
+}
+
+/* ===== Fetch playlist từ nginx autoindex ===== */
+async function loadPlaylist() {
+    const res = await fetch(PLAYLIST_URL);
+    const html = await res.text();
+
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    const folders = [...doc.querySelectorAll('a')]
+        .map(a => a.getAttribute('href'))
+        .filter(h =>
+            h &&
+            h !== '../' &&
+            h.endsWith('/')
+        );
+
+    playlistEl.innerHTML = '';
+
+    if (folders.length === 0) {
+        playlistEl.innerHTML = '❌ Không có video';
+        return;
+    }
+
+    folders.forEach((f, index) => {
+        const name = f.replace('/', '');
+        const src = `${PLAYLIST_URL}${name}/index.m3u8`;
+
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.textContent = name;
+
+        div.onclick = () => {
+            document.querySelectorAll('.item')
+                .forEach(i => i.classList.remove('active'));
+            div.classList.add('active');
+            play(src);
+        };
+
+        playlistEl.appendChild(div);
+
+    
+        if (index === 0) {
+            div.classList.add('active');
+            play(src);
+        }
+    });
+}
+
+loadPlaylist();
+</script>
+
+</body>
+</html>
